@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Ledger / punch-card palette: ink, paper, brass, deep teal */
+    --background: 40 14% 96%;       /* paper */
+    --foreground: 220 22% 14%;      /* ink */
+    --card: 0 0% 100%;
+    --card-foreground: 220 22% 14%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 22% 14%;
+    --primary: 32 55% 42%;          /* brass */
+    --primary-foreground: 40 30% 97%;
+    --secondary: 40 12% 91%;
+    --secondary-foreground: 220 22% 14%;
+    --muted: 40 10% 92%;
+    --muted-foreground: 220 9% 42%;
+    --accent: 172 38% 27%;          /* deep teal */
+    --accent-foreground: 40 30% 97%;
+    --destructive: 6 62% 42%;
+    --destructive-foreground: 40 30% 97%;
+    --border: 40 12% 87%;
+    --input: 40 12% 87%;
+    --ring: 32 55% 42%;
+    --chart-1: 32 55% 42%;
+    --chart-2: 172 38% 27%;
+    --chart-3: 6 62% 42%;
+    --chart-4: 220 22% 14%;
+    --chart-5: 43 74% 62%;
+    --radius: 0.375rem;
+
+    /* Brand surfaces */
+    --ink: 220 26% 12%;
+    --ink-foreground: 40 20% 92%;
+    --brass: 32 55% 42%;
+    --brass-light: 36 62% 90%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display), ui-serif, serif;
+  }
+  .font-mono-time {
+    font-family: var(--font-time), ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
