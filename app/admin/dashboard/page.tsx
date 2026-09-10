@@ -145,7 +145,7 @@ export default function AdminDashboard() {
         todayAttendance: todayAtt,
       });
 
-      const depts = [...new Set(activeEmployees.map((e: any) => e.department).filter(Boolean))] as string[];
+      const depts = Array.from(new Set(activeEmployees.map((e: any) => e.department).filter(Boolean))) as string[];
       setDepartments(depts);
     }
 
