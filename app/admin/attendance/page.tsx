@@ -72,6 +72,9 @@ export default function AdminAttendance() {
         check_in_longitude,
         check_out_latitude,
         check_out_longitude,
+        break_start,
+        break_end,
+        break_minutes,
         created_at,
         updated_at,
         profiles!inner (
@@ -243,6 +246,7 @@ export default function AdminAttendance() {
                     <TableHead>Check In</TableHead>
                     <TableHead>Check Out</TableHead>
                     <TableHead>Total Hours</TableHead>
+                    <TableHead>Break</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Location</TableHead>
                   </TableRow>
@@ -260,6 +264,15 @@ export default function AdminAttendance() {
                       <TableCell>{formatTimestamp(record.check_out)}</TableCell>
                       <TableCell>
                         {record.total_hours ? formatTotalHours(record.total_hours) : '—'}
+                      </TableCell>
+                      <TableCell>
+                        {record.break_minutes ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 border border-amber-200">
+                            {Math.round(record.break_minutes)}m
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={record.status} late={record.late} />

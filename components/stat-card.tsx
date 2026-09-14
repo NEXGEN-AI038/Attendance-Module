@@ -19,9 +19,23 @@ const colorClasses = {
   purple: 'bg-[hsl(172,38%,27%)]/10 text-[hsl(172,38%,27%)] border-[hsl(172,38%,27%)]/15',
 };
 
+const topBorderClasses = {
+  blue: 'border-t-ink/50 hover:border-t-ink',
+  green: 'border-t-emerald-400 hover:border-t-emerald-600',
+  red: 'border-t-red-400 hover:border-t-red-600',
+  amber: 'border-t-brass/60 hover:border-t-brass',
+  gray: 'border-t-muted-foreground/30 hover:border-t-muted-foreground/60',
+  purple: 'border-t-[hsl(172,38%,27%)]/60 hover:border-t-[hsl(172,38%,27%)]',
+};
+
 export function StatCard({ label, value, icon: Icon, color = 'blue', subtitle }: StatCardProps) {
   return (
-    <Card className="border-t-2 border-t-brass/60">
+    <Card
+      className={cn(
+        'group border-t-2 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg',
+        topBorderClasses[color]
+      )}
+    >
       <CardContent className="p-5">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
@@ -29,7 +43,12 @@ export function StatCard({ label, value, icon: Icon, color = 'blue', subtitle }:
             <p className="font-mono-time text-2xl font-semibold tracking-tight">{value}</p>
             {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
           </div>
-          <div className={cn('flex h-11 w-11 items-center justify-center rounded-md border', colorClasses[color])}>
+          <div
+            className={cn(
+              'flex h-11 w-11 items-center justify-center rounded-md border transition-transform duration-300 group-hover:scale-110',
+              colorClasses[color]
+            )}
+          >
             <Icon className="h-5 w-5" />
           </div>
         </div>

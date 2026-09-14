@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS attendance (
   check_in_longitude numeric(10,7),
   check_out_latitude numeric(10,7),
   check_out_longitude numeric(10,7),
+  break_start timestamptz,
+  break_end timestamptz,
+  break_minutes numeric(6,2) NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -176,6 +179,9 @@ RETURNS TABLE (
   total_hours numeric,
   status varchar,
   late boolean,
+  break_start timestamptz,
+  break_end timestamptz,
+  break_minutes numeric,
   created_at timestamptz,
   updated_at timestamptz
 )
@@ -208,7 +214,8 @@ BEGIN
   IF v_record_exists AND v_existing.check_in IS NOT NULL THEN
     RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
       v_existing.check_in, v_existing.check_out, v_existing.total_hours,
-      v_existing.status, v_existing.late, v_existing.created_at, v_existing.updated_at;
+      v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+      v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
     RETURN;
   END IF;
 
@@ -226,7 +233,8 @@ BEGIN
     INTO v_existing;
     RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
       v_existing.check_in, v_existing.check_out, v_existing.total_hours,
-      v_existing.status, v_existing.late, v_existing.created_at, v_existing.updated_at;
+      v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+      v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
     RETURN;
   END IF;
 
@@ -237,7 +245,8 @@ BEGIN
 
   RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
     v_existing.check_in, v_existing.check_out, v_existing.total_hours,
-    v_existing.status, v_existing.late, v_existing.created_at, v_existing.updated_at;
+    v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+    v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
   RETURN;
 END;
 $$;
@@ -256,6 +265,9 @@ RETURNS TABLE (
   total_hours numeric,
   status varchar,
   late boolean,
+  break_start timestamptz,
+  break_end timestamptz,
+  break_minutes numeric,
   created_at timestamptz,
   updated_at timestamptz
 )
@@ -271,6 +283,8 @@ DECLARE
   v_total_hours numeric;
   v_settings settings%ROWTYPE;
   v_status varchar;
+  v_break_minutes numeric;
+  v_break_end timestamptz;
 BEGIN
   SELECT * INTO v_existing FROM attendance WHERE attendance.employee_id = v_employee_id AND attendance.attendance_date = v_today;
   IF NOT FOUND THEN
@@ -282,11 +296,23 @@ BEGIN
   IF v_existing.check_out IS NOT NULL THEN
     RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
       v_existing.check_in, v_existing.check_out, v_existing.total_hours,
-      v_existing.status, v_existing.late, v_existing.created_at, v_existing.updated_at;
+      v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+      v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
     RETURN;
   END IF;
 
-  v_total_hours := EXTRACT(EPOCH FROM (v_check_out_time - v_existing.check_in)) / 3600;
+  -- If a break was left running, close it out at check-out time so time isn't lost.
+  v_break_minutes := COALESCE(v_existing.break_minutes, 0);
+  v_break_end := v_existing.break_end;
+  IF v_existing.break_start IS NOT NULL AND v_existing.break_end IS NULL THEN
+    v_break_minutes := v_break_minutes + ROUND(EXTRACT(EPOCH FROM (v_check_out_time - v_existing.break_start)) / 60, 2);
+    v_break_end := v_check_out_time;
+  END IF;
+
+  v_total_hours := EXTRACT(EPOCH FROM (v_check_out_time - v_existing.check_in)) / 3600 - (v_break_minutes / 60);
+  IF v_total_hours < 0 THEN
+    v_total_hours := 0;
+  END IF;
   v_total_hours := ROUND(v_total_hours, 2);
 
   SELECT * INTO v_settings FROM settings WHERE settings.id = 1;
@@ -300,14 +326,122 @@ BEGIN
 
   UPDATE attendance
   SET check_out = v_check_out_time, total_hours = v_total_hours, status = v_status,
-    check_out_latitude = p_latitude, check_out_longitude = p_longitude, updated_at = now()
+    check_out_latitude = p_latitude, check_out_longitude = p_longitude,
+    break_end = v_break_end, break_minutes = v_break_minutes, updated_at = now()
   WHERE attendance.id = v_existing.id
   RETURNING *
   INTO v_existing;
 
   RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
     v_existing.check_in, v_existing.check_out, v_existing.total_hours,
-    v_existing.status, v_existing.late, v_existing.created_at, v_existing.updated_at;
+    v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+    v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
+  RETURN;
+END;
+$$;
+
+-- ============================================
+-- FUNCTION: start_break()
+-- ============================================
+DROP FUNCTION IF EXISTS start_break();
+CREATE OR REPLACE FUNCTION start_break()
+RETURNS TABLE (
+  id uuid,
+  employee_id uuid,
+  attendance_date date,
+  check_in timestamptz,
+  check_out timestamptz,
+  total_hours numeric,
+  status varchar,
+  late boolean,
+  break_start timestamptz,
+  break_end timestamptz,
+  break_minutes numeric,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_employee_id uuid := auth.uid();
+  v_today date := CURRENT_DATE;
+  v_existing attendance%ROWTYPE;
+BEGIN
+  SELECT * INTO v_existing FROM attendance WHERE attendance.employee_id = v_employee_id AND attendance.attendance_date = v_today;
+  IF NOT FOUND OR v_existing.check_in IS NULL THEN
+    RAISE EXCEPTION 'You must check in before starting a break';
+  END IF;
+  IF v_existing.check_out IS NOT NULL THEN
+    RAISE EXCEPTION 'You have already checked out for today';
+  END IF;
+  IF v_existing.break_start IS NOT NULL AND v_existing.break_end IS NULL THEN
+    RAISE EXCEPTION 'A break is already in progress';
+  END IF;
+
+  UPDATE attendance
+  SET break_start = now(), break_end = NULL, updated_at = now()
+  WHERE attendance.id = v_existing.id
+  RETURNING *
+  INTO v_existing;
+
+  RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
+    v_existing.check_in, v_existing.check_out, v_existing.total_hours,
+    v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+    v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
+  RETURN;
+END;
+$$;
+
+-- ============================================
+-- FUNCTION: end_break()
+-- ============================================
+DROP FUNCTION IF EXISTS end_break();
+CREATE OR REPLACE FUNCTION end_break()
+RETURNS TABLE (
+  id uuid,
+  employee_id uuid,
+  attendance_date date,
+  check_in timestamptz,
+  check_out timestamptz,
+  total_hours numeric,
+  status varchar,
+  late boolean,
+  break_start timestamptz,
+  break_end timestamptz,
+  break_minutes numeric,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_employee_id uuid := auth.uid();
+  v_today date := CURRENT_DATE;
+  v_existing attendance%ROWTYPE;
+  v_break_end timestamptz := now();
+  v_break_minutes numeric;
+BEGIN
+  SELECT * INTO v_existing FROM attendance WHERE attendance.employee_id = v_employee_id AND attendance.attendance_date = v_today;
+  IF NOT FOUND OR v_existing.break_start IS NULL OR v_existing.break_end IS NOT NULL THEN
+    RAISE EXCEPTION 'No break is currently in progress';
+  END IF;
+
+  v_break_minutes := COALESCE(v_existing.break_minutes, 0) + ROUND(EXTRACT(EPOCH FROM (v_break_end - v_existing.break_start)) / 60, 2);
+
+  UPDATE attendance
+  SET break_end = v_break_end, break_minutes = v_break_minutes, updated_at = now()
+  WHERE attendance.id = v_existing.id
+  RETURNING *
+  INTO v_existing;
+
+  RETURN QUERY SELECT v_existing.id, v_existing.employee_id, v_existing.attendance_date,
+    v_existing.check_in, v_existing.check_out, v_existing.total_hours,
+    v_existing.status, v_existing.late, v_existing.break_start, v_existing.break_end,
+    v_existing.break_minutes, v_existing.created_at, v_existing.updated_at;
   RETURN;
 END;
 $$;
@@ -315,6 +449,7 @@ $$;
 -- ============================================
 -- FUNCTION: get_todays_attendance()
 -- ============================================
+DROP FUNCTION IF EXISTS get_todays_attendance();
 CREATE OR REPLACE FUNCTION get_todays_attendance()
 RETURNS TABLE (
   id uuid,
@@ -325,6 +460,9 @@ RETURNS TABLE (
   total_hours numeric,
   status varchar,
   late boolean,
+  break_start timestamptz,
+  break_end timestamptz,
+  break_minutes numeric,
   created_at timestamptz,
   updated_at timestamptz
 )
@@ -334,7 +472,8 @@ STABLE
 SET search_path = public
 AS $$
   SELECT a.id, a.employee_id, a.attendance_date, a.check_in, a.check_out,
-    a.total_hours, a.status, a.late, a.created_at, a.updated_at
+    a.total_hours, a.status, a.late, a.break_start, a.break_end, a.break_minutes,
+    a.created_at, a.updated_at
   FROM attendance a
   WHERE a.employee_id = auth.uid() AND a.attendance_date = CURRENT_DATE;
 $$;

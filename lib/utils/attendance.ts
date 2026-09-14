@@ -17,6 +17,23 @@ export function getStatusBadgeClass(status: AttendanceStatus): string {
   }
 }
 
+export function getStatusDotClass(status: AttendanceStatus): string {
+  switch (status) {
+    case 'present':
+      return 'bg-emerald-500';
+    case 'absent':
+      return 'bg-red-500';
+    case 'half_day':
+      return 'bg-amber-500';
+    case 'leave':
+      return 'bg-blue-500';
+    case 'incomplete':
+      return 'bg-gray-400';
+    default:
+      return 'bg-gray-400';
+  }
+}
+
 export function getStatusLabel(status: AttendanceStatus): string {
   switch (status) {
     case 'present':

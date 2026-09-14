@@ -30,6 +30,9 @@ export interface AttendanceRecord {
   check_in_longitude: number | null;
   check_out_latitude: number | null;
   check_out_longitude: number | null;
+  break_start: string | null;
+  break_end: string | null;
+  break_minutes: number;
   created_at: string;
   updated_at: string;
 }
